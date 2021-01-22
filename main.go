@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"log"
 
-	"github.com/gofiber/fiber"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/template/html"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -15,9 +16,8 @@ import (
 
 const dbName = "beerraters"
 const collectionName = "reviews"
-const port = 8000
 
-//GetMongoDbConnection get connection of mongodb
+//GetMongoDbConnection get connection of mongodbgo
 func GetMongoDbConnection() (*mongo.Client, error) {
 
 	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://localhost:27017"))
@@ -46,11 +46,10 @@ func getMongoDbCollection(DbName string, CollectionName string) (*mongo.Collecti
 	return collection, nil
 }
 
-func getBeer(c *fiber.Ctx) {
+func getBeer(c *fiber.Ctx) error {
 	collection, err := getMongoDbCollection(dbName, collectionName)
 	if err != nil {
-		c.Status(500).Send(err)
-		return
+		return c.Status(500).Send([]byte(err.Error()))
 	}
 
 	var filter bson.M = bson.M{}
@@ -66,26 +65,38 @@ func getBeer(c *fiber.Ctx) {
 	defer cur.Close(context.Background())
 
 	if err != nil {
-		c.Status(500).Send(err)
-		return
+		return c.Status(500).Send([]byte(err.Error()))
 	}
 
 	cur.All(context.Background(), &results)
 
 	if results == nil {
-		c.SendStatus(404)
-		return
+		return c.SendStatus(404)
 	}
 
 	json, _ := json.Marshal(results)
-	c.Send(json)
+	return c.Send(json)
 }
 
 func main() {
-	app := fiber.New()
+	// Initialize standard Go html template engine
+	engine := html.New("./views", ".html")
+
+	// Pass engine to Fiber's Views Engine
+	app := fiber.New(fiber.Config{
+		Views: engine,
+	})
+
+	app.Static("/", "./public")
+
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.Render("index", fiber.Map{
+			"Title": "Hello, World!",
+		})
+	})
 	app.Get("/beer/:id?", getBeer)
 	// app.Post("/beer", createBeer)
 	// app.Put("/beer/:id", updateBeer)
 	// app.Delete("/beer/:id", deleteBeer)
-	app.Listen(port)
+	app.Listen(":3000")
 }
